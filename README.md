@@ -22,11 +22,11 @@ MITHUN VENKATESH GOWDA — I picked the "City Guides" corpora.
 
 ## What This Does
 
-<!-- Three or four sentences. Which corpus you picked, and the kinds of
-     questions your system answers. Write it for someone who has never seen
-     this repo.
+This is a question-answering system over the `city_guides` corpus: fourteen short travel guides to an invented region, nine of them town guides and five thematic ones covering the seasons, walking, eating, regional transport and
+accessibility. You ask a factual question about the region and it finds the most relevant sections of those guides, hands them to a language model, and returns an answer that names the file the answer came from.
 
-     Milestone 5. -->
+It is built for specific questions with a right answer — when the parking lots in Halden Bay fill up, what hours the pubs in Kestrelford serve food, how often the access road to Elder Ness floods — rather than open-ended ones like "where should I go on holiday". If a question isn't covered by the fourteen documents,
+a relevance gate stops it before the model is ever called and the system says it doesn't have enough information instead of inventing an answer.
 
 ## Chunking Strategy
 
@@ -295,9 +295,12 @@ trimming it makes the model hedge. I kept 5.
 
      Milestone 5. -->
 
-**1.**
+**1. The chunker emitted headings with nothing under them.** I asked Claude for a version of `split_documents` that cuts at `##` headings instead of the starter's 800-character windows, keeping the intro paragraph that sits above the first heading so no text was dropped. What came back did that, but it kept
+that text *unconditionally* — and in four of my fourteen documents there is nothing above the first heading except the title line. So `guide_walking.md#0` came out as a 23-character chunk reading `# Walking in the region`: a heading with no content under it, which is the same fragment problem I was replacing the baseline to fix. I caught it the way the milestone tells you to, by printing the chunks and reading the shortest one — the index summary said "shortest 23", barely better than the baseline's 24. The fix was to skip a
+preamble that has no body beneath its title, which took the corpus from 98 chunks to 94 and the shortest chunk from 23 characters to 174.
 
-**2.**
+**2. It wrote a measurement into this README that it had never measured.** When Claude drafted the Chunking Strategy write-up for the title-prefix change, the paragraph claimed that splitting on headings alone had made retrieval "worse" and that `guide_seasons.md` "won every time". Neither was true: no version without the title prefix had ever been indexed, so there were no numbers behind either claim. It got caught before it went in the file, and I had the comparison actually run — the same 94 chunks indexed twice, once with the title line and once without. The real result was milder than the draft: without the prefix the Brightwater answer chunk sits at rank 5, not missing entirely, and the prefix actually *costs* 0.03 on the hospital question. The measured table in the Chunking Strategy section is that comparison, including the cost, rather
+than the confident version. This is the thing I'd most watch for next time — the writing sounded more certain than the evidence was.
 
 <!-- ── Stretch features ─────────────────────────────────────────────────────
      Doing one? Say so here BEFORE you start. A feature this README never
