@@ -142,14 +142,31 @@ Each of these names its own town, so each can be retrieved by that town's name a
 <!-- One complete question and answer, pasted as text, with the source line
      visible. Milestone 4. -->
 
-**Question:**
+**Question:** If I need a full hospital rather than a minor injuries unit, which town do I go to?
 
-**Answer:**
+**Answer:** produced by `app.py ask`, which is `store.py::search` → `gate.py::check` → `generate.py::answer_from_chunks`.
 
 ```
+  (best distance 0.384, cutoff 0.4)
+
+According to `guide_accessibility.md`, the nearest full hospital is in Marchwood.
+
+However, `guide_givens_mill.md`, `guide_kestrelford.md`, `guide_marchwood.md`, and
+`guide_thornby_wells.md` all state that the nearest full hospital is in Brightwater.
+Because the documents disagree, both answers are given depending on the source used.
+
+Sources retrieved: guide_accessibility.md, guide_givens_mill.md, guide_kestrelford.md, guide_marchwood.md, guide_thornby_wells.md
 ```
 
-**My relevance cutoff:**
+I picked this question because it is the one my corpus is worst at. Nine of my
+fourteen documents end with an identical "Practical notes" paragraph saying
+"The nearest full hospital is in Brightwater", and `guide_accessibility.md`
+contradicts all nine: "The nearest full hospital is in Marchwood." So one
+correct chunk is competing with nine near-identical decoys, and the answer
+above is grounded — every filename it names really does contain the claim it is
+attached to.
+
+**My relevance cutoff:** `THRESHOLD = 0.40` in `config.py`.
 
 <!-- The number you set in config.py, and how you got there.
 
@@ -177,6 +194,95 @@ Measured with `store.py::search`, top-k 5, baseline chunker (51 chunks).
 
 In-corpus questions cluster at **0.287–0.372**. Out-of-corpus questions start
 at **0.467**, so the gap is 0.372 → 0.467, about 0.095 wide.
+
+### Re-measured after Milestone 3
+
+Re-chunking moved all ten numbers, so the table above no longer describes my
+system. Same ten questions, same `store.py::search` at top-k 5, against the 94
+heading-split chunks:
+
+| Question | In corpus? | Best distance |
+|---|---|---|
+| What hours do the pubs in Kestrelford serve food? | yes | 0.194 |
+| What are the best months to visit Brightwater? | yes | 0.294 |
+| How often does the access road to Elder Ness flood? | yes | 0.310 |
+| When do the parking lots in Halden Bay fill up on summer weekends? | yes | 0.325 |
+| If I need a full hospital rather than a minor injuries unit, which town do I go to? | yes | 0.384 |
+| How long is the coastal walk around Cape Town? | no | 0.409 |
+| What time does the fish market in Bergen open? | no | 0.453 |
+| What are the best months to visit Barcelona? | no | 0.533 |
+| How do I write a for loop in Rust? | no | 0.836 |
+| Who won the 1994 World Cup? | no | 0.975 |
+
+In-corpus now runs **0.194 to 0.384** and out-of-corpus **0.409 to 0.975**. Every
+in-corpus question got closer, which is what I wanted from the chunker. But the
+out-of-corpus near-misses got closer too, so the gap narrowed from 0.095 to
+**0.38390 → 0.40877, about 0.0249 wide**.
+
+**Why 0.40.** Any number inside that gap refuses all five out-of-corpus
+questions and wrongly refuses none of mine, so the gap decides almost
+everything and I only had to pick where inside it. The midpoint is 0.3963 and I
+went slightly above it, to 0.40, because the two errors are not equally
+visible. Refusing a question I could have answered is the error a user notices
+and is annoyed by; letting a near-miss through produces an answer that looks
+fine. So I gave the in-corpus side the larger margin — 0.016 of headroom below
+the cutoff, against 0.0088 above it.
+
+The starter's 0.6 let three of my five out-of-corpus questions through, because
+all three are travel questions about real places (Bergen, Cape Town,
+Barcelona) that score far closer to a corpus of travel guides than the
+far-field ones do. Rust and the World Cup would be refused by almost any
+cutoff; those three are the ones that make the number matter.
+
+**What this cutoff costs me.** I tried a sixth in-corpus question — "How much
+does it cost to climb the church tower in Kestrelford, and what are its opening
+hours?" — and the gate refused it at 0.4126, even though the top chunk really
+does contain "£2". Worse, 0.4126 is *above* Cape Town's 0.40877, so there is no
+cutoff anywhere that accepts this question and still refuses my out-of-corpus
+set. My clean gap is clean for the ten questions I measured, not in general.
+The compound phrasing seems to be what costs it: the answer to half the
+question genuinely isn't in the corpus.
+
+### Grounding
+
+`GROUNDING_INSTRUCTION` in `generate.py` already covered the obvious things —
+use only these documents, admit when they don't cover it, name the file. I
+tightened it after this answer:
+
+```
+Q: Where is the nearest hospital if I am staying in Kestrelford?
+A: According to `guide_kestrelford.md`, the nearest full hospital to
+   Kestrelford is in Brightwater.
+```
+
+`guide_accessibility.md` was retrieved for that question and says the nearest
+full hospital is in Marchwood, and that Kestrelford has only a minor injuries
+unit. The answer is *grounded* — `guide_kestrelford.md` does say Brightwater —
+but the model silently picked one of two contradicting sources and the reader
+cannot tell. The starter's instruction has no rule for conflicts, and my corpus
+has a known one. I added two rules:
+
+- Only name a document that actually states the fact you are giving. Do not
+  cite a document merely because it mentions the same place.
+- If two documents disagree, say so and give both answers with their
+  filenames. Do not silently pick one.
+
+The same question now returns "The documents disagree on the location of the
+nearest full hospital for Kestrelford" and names both files. All five of my
+test questions still answer correctly.
+
+### Top-k
+
+Left at 5, but checked rather than inherited. The chunk containing the answer is at rank 1 for four of my five questions and rank 2 for the fifth, so top-k could be as low as 2. I tried it, because on the hospital question ranks 2 to 5 are all decoys carrying the wrong fact and I expected fewer chunks to help:
+
+| top-k | Answer |
+|---|---|
+| 5 | "According to `guide_accessibility.md`, the nearest full hospital is in Marchwood." |
+| 3 | "...you go to Marchwood (from `guide_accessibility.md`) or Brightwater (from `guide_givens_mill.md`)..." |
+| 2 | "If you are in Givens Mill... Brightwater. If you are referring to the region generally... Marchwood." |
+
+The opposite of what I expected: 5 gives the cleanest correct answer and
+trimming it makes the model hedge. I kept 5.
 
 ## How I Used AI
 

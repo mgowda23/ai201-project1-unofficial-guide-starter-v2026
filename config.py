@@ -47,10 +47,17 @@ TOP_K = 5               # how many chunks to pull back per question
 #
 # LOWER IS BETTER: 0.3 is a close match, 0.9 is unrelated.
 #
-# 0.6 is a reasonable starting point, not a right answer. Milestone 4 has you
-# measure your own two groups of distances and put the cutoff in the gap.
-# Most corpora land somewhere between 0.45 and 0.75.
-THRESHOLD = 0.6
+# Measured in Milestone 4. My five in-corpus questions land at 0.194 to 0.384
+# and my five out-of-corpus ones at 0.409 to 0.975, so the gap is
+# 0.38390 -> 0.40877 and only 0.0249 wide. 0.40 sits in it, just above the
+# midpoint of 0.3963 on purpose: the near side is a question I could answer
+# and wrongly refuse, which is the error a user actually notices, so I gave
+# that side the larger margin (0.016 below vs 0.0088 above).
+#
+# 0.6, the starter default, let three of my five out-of-corpus questions
+# through — they are travel questions about real places my corpus doesn't
+# cover, and they score much closer than the far-field ones do.
+THRESHOLD = 0.40
 
 
 # ─── Models ──────────────────────────────────────────────────────────────────

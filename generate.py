@@ -279,6 +279,10 @@ Rules:
 - Use only the information in the documents below. Do not use anything you know from elsewhere.
 - If the documents don't cover the question, say you don't have enough information. Do not guess.
 - Name the document your answer came from, using the filename given in each excerpt.
+- Only name a document that actually states the fact you are giving. Do not cite a
+  document merely because it mentions the same place.
+- If two documents disagree, say so and give both answers with their filenames.
+  Do not silently pick one.
 - Be brief. Two or three sentences is usually enough."""
 
 
