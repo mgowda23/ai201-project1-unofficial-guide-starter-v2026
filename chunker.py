@@ -22,6 +22,7 @@ to it, write down what you saw, and move on. That's a real observation about
 your pipeline, not giving up.
 """
 
+import re
 from dataclasses import dataclass
 
 import config
@@ -80,24 +81,104 @@ def fallback_split(
     return chunks
 
 
+def _body_under_title(part: str) -> bool:
+    """True if there is real text under the `# title`, not just the title."""
+    lines = part.split("\n", 1)
+    if not lines[0].startswith("# "):
+        return True          # no title line at all, so it's all body
+    return len(lines) > 1 and bool(lines[1].strip())
+
+
+def split_on_paragraphs(body: str, limit: int) -> list[str]:
+    """
+    Break a section that came out longer than `limit` on its blank lines.
+
+    Nothing in city_guides reaches this — the longest `##` section is 711
+    characters against a limit of 800 — but a section is only a good chunk
+    while sections stay short, and I would rather this fall back to paragraphs
+    than hand back one enormous chunk if that ever stops being true.
+    """
+    pieces: list[str] = []
+    current = ""
+
+    for paragraph in body.split("\n\n"):
+        paragraph = paragraph.strip()
+        if not paragraph:
+            continue
+        joined = f"{current}\n\n{paragraph}" if current else paragraph
+        if current and len(joined) > limit:
+            pieces.append(current)
+            current = paragraph
+        else:
+            current = joined
+
+    if current:
+        pieces.append(current)
+    return pieces
+
+
 def split_documents(documents: list[Document]) -> list[Chunk]:
     """
-    Split documents into chunks. ⚠️ REPLACE THE BODY OF THIS IN MILESTONE 3.
+    One `##` section, one chunk.
 
-    Right now it just calls the fallback. That is the plain, generic behaviour
-    the brief is talking about.
+    The fourteen city_guides documents are already divided into topics by the
+    person who wrote them: nine of them share the same seven-section template
+    and the other five are thematic guides with four or five sections, 84
+    sections in all. The baseline ignores that and cuts every 800 characters,
+    and since the longest section in the corpus is 711 characters there was
+    never a cut that could land *between* two sections — every one landed
+    inside one. See the README for what that cost.
 
-    When you write your own strategy, set `produced_by` to
-    "chunker.py::split_documents" so your README's Sample Chunks section names
-    the right function. `app.py chunks` prints that string for you.
+    The text above the first `##` is kept as its own chunk where there is any.
+    Ten documents open with a real intro paragraph of 123 to 250 characters;
+    the other four have nothing above the first heading but the title line, and
+    those produce no extra chunk.
 
-    Things worth thinking about before you write any code:
-      - Are your documents short posts or long guides?
-      - Is the useful information in one sentence, or spread over a paragraph?
-      - Would splitting on paragraph breaks keep more thoughts intact than
-        splitting on a character count?
+    No overlap, on purpose — see `config.CHUNK_OVERLAP`.
     """
-    return fallback_split(documents)
+    limit = config.CHUNK_SIZE
+    chunks: list[Chunk] = []
+
+    for doc in documents:
+        # Every chunk carries the document's `# title`. The sections don't
+        # repeat the town name — `## Where to stay` in guide_corry_vale.md
+        # talks about "the entire valley" and never says "Corry Vale" — so
+        # without this a section about a town can't be found by its name.
+        title = doc.text.lstrip().split("\n", 1)[0].strip()
+        if not title.startswith("# "):
+            title = ""
+
+        # A lookahead, so the heading stays attached to the section it labels.
+        # Anchored to line starts, so "##" inside a sentence doesn't split.
+        sections: list[str] = []
+        for part in re.split(r"(?m)^(?=## )", doc.text):
+            part = part.strip()
+            if not part:
+                continue
+            # The bit above the first `## ` is the only part that can turn out
+            # to be a heading with nothing under it. Four documents open
+            # straight onto their first section, and "# Walking in the region"
+            # on its own is a 23-character chunk that answers no question.
+            if not part.startswith("## ") and not _body_under_title(part):
+                continue
+            if len(part) > limit:
+                sections.extend(split_on_paragraphs(part, limit))
+            else:
+                sections.append(part)
+
+        for index, section in enumerate(sections):
+            # The intro chunk already opens with the title; don't repeat it.
+            text = section if section.startswith("# ") else f"{title}\n\n{section}"
+            chunks.append(
+                Chunk(
+                    text=text.strip(),
+                    source=doc.source,
+                    index=index,
+                    produced_by="chunker.py::split_documents",
+                )
+            )
+
+    return chunks
 
 
 def describe(chunks: list[Chunk]) -> str:

@@ -29,8 +29,8 @@
 
 ## Chunking Strategy
 
-**Chunk size:**
-**Overlap:**
+**Chunk size:** one `##` section, whatever length that happens to be — 176 to 711 characters in this corpus, median 297. `CHUNK_SIZE` stays at 800 but only as a ceiling for splitting a section that ever arrives longer than that.
+**Overlap:** 0.
 
 <!-- What about YOUR documents made you pick these numbers? Short posts and
      long sectioned guides don't want the same chunking, and "800 seemed
@@ -41,6 +41,36 @@
      more than pretending you got it right first time.
 
      Milestone 3. -->
+
+When I read the documents, I noticed that every one is divided into `##` sections that are complete thoughts. The baseline chunker ignores those boundaries and cuts on a character count, so it splits some of those sections in half. That makes the answer to a question harder to find, because the fact is no longer in any single chunk. I set the chunk size at 800 characters because the longest section in my corpus is 711 characters, so no section will ever be split.
+
+**Why one section and not smaller.** The median section is 297 characters — three or four sentences on a single topic. Splitting that again would separate a fact from the thing it is about, which is the failure I am already trying to fix.
+
+**Why overlap is 0.** Overlap exists to repair a thought that a fixed-size window cut in half. Cutting at headings the author wrote means there is no half to rejoin, so the 120 characters of bleed-over would just be duplicated text making chunks blurrier.
+
+**The text above the first `##`.** Ten documents have a real intro paragraph there, 123 to 250 characters; the other four have nothing but the title line. A heading-based splitter would walk straight past both. I make the intro paragraph its own chunk where there is one, so no text is silently dropped.
+
+### Two things I changed after reading the chunks
+
+Everything above was written before I coded. Printing five chunks and actually reading them changed my mind twice.
+
+**The title-only documents.** My first version emitted the text above the first `##` as a chunk whenever there was any — and in four documents that text is only the title line. So `guide_walking.md#0` came out as a 23-character chunk reading `# Walking in the region`: a heading with nothing under it, which is the same fragment problem I was trying to fix arriving from a different direction. Those four now produce no intro chunk. That took the corpus from 98 chunks to 94, and the shortest chunk from 23 characters to 174.
+
+**Every chunk now carries its document's `# title`.** This is the one I did not see coming. Applying the brief's test — could someone answer a question using only this chunk? — four of my five samples failed it. `## Where to stay` from `guide_corry_vale.md` reads "Perhaps thirty beds in the entire valley" and never says "Corry Vale". The sections don't repeat the town name, because the title already said it once at the top of the document. Splitting on headings threw that title away, so a chunk about a town could no longer be found by the name of that town.
+
+I indexed the same 94 chunks twice to check this was worth doing, once with the title line and once without, and recorded where the chunk containing each answer ranked:
+
+| Question | No title | With title |
+|---|---|---|
+| Best months to visit Brightwater | rank 5, 0.4541 | **rank 1, 0.2938** |
+| When Halden Bay parking fills | rank 1, 0.3296 | rank 2, 0.3276 |
+| How often Elder Ness floods | rank 1, 0.4362 | **rank 1, 0.3101** |
+| Which town has a full hospital | rank 1, 0.3556 | rank 1, 0.3839 |
+| Kestrelford pub food hours | rank 1, 0.2658 | **rank 1, 0.1936** |
+
+It is not free. On the hospital question the title of `guide_accessibility.md` has nothing to do with hospitals, so it dilutes the chunk and the distance gets *worse*, 0.3556 to 0.3839. I kept it anyway: that chunk is rank 1 either way, whereas the Brightwater question was sitting in the last retrieved slot and is now first.
+
+**Final numbers:** 94 chunks, 322 characters on average, shortest 174, longest 762.
 
 ## Sample Chunks
 
@@ -53,30 +83,58 @@
 
      Milestone 3. -->
 
-**Chunk 1** — source: `` — produced by: ``
+Printed by `python app.py chunks -n 5`.
+
+**Chunk 1** — source: `guide_accessibility.md#0` — produced by: `chunker.py::split_documents`
 
 ```
+# Getting around the region with limited mobility
+
+An honest assessment rather than a promotional one. Some of these places are
+difficult and it is better to know in advance.
 ```
 
-**Chunk 2** — source: `` — produced by: ``
+**Chunk 2** — source: `guide_corry_vale.md#5` — produced by: `chunker.py::split_documents`
 
 ```
+# Corry Vale
+
+## Where to stay
+
+Perhaps thirty beds in the entire valley, spread across two pubs and a handful of farmhouse rooms. In summer these are booked months ahead. Camping is permitted on two marked fields and nowhere else.
 ```
 
-**Chunk 3** — source: `` — produced by: ``
+**Chunk 3** — source: `guide_givens_mill.md#2` — produced by: `chunker.py::split_documents`
 
 ```
+# Givens Mill
+
+## Getting around
+
+Everything is on one street along the river. The mill is at one end and the church at the other, eight minutes apart. The riverside path continues in both directions for as far as you want to walk.
 ```
 
-**Chunk 4** — source: `` — produced by: ``
+**Chunk 4** — source: `guide_kestrelford.md#4` — produced by: `chunker.py::split_documents`
 
 ```
+# Kestrelford
+
+## What to see
+
+The market square on a Saturday morning is the main event and has run continuously since the 1400s. The parish church has a 13th-century tower you can climb for £2. The old trackbed walk runs six miles to the next village along an easy gradient and is the best half-day here.
 ```
 
-**Chunk 5** — source: `` — produced by: ``
+**Chunk 5** — source: `guide_pellew_sands.md#6` — produced by: `chunker.py::split_documents`
 
 ```
+# Pellew Sands
+
+## When to go
+
+June and September for the beach without the crowds. July and August are busy and the town is at its most itself, for better and worse. Winter is bleak, largely closed, and has a following among people who like that sort of thing.
 ```
+
+Each of these names its own town, so each can be retrieved by that town's name and read on its own. That was not true before I added the title line — chunks 2 to 5 would have been an anonymous `## Where to stay` or `## What to see`.
 
 ## Sample Answer
 
@@ -101,9 +159,23 @@
 
      Milestone 4. -->
 
+Measured with `store.py::search`, top-k 5, baseline chunker (51 chunks).
+
 | Question | In corpus? | Best distance |
 |---|---|---|
-|  |  |  |
+| How often does the access road to Elder Ness flood? | yes | 0.287 |
+| If I need a full hospital rather than a minor injuries unit, which town do I go to? | yes | 0.291 |
+| What hours do the pubs in Kestrelford serve food? | yes | 0.343 |
+| What are the best months to visit Brightwater? | yes | 0.369 |
+| When do the parking lots in Halden Bay fill up on summer weekends? | yes | 0.372 |
+| What time does the fish market in Bergen open? | no | 0.467 |
+| How long is the coastal walk around Cape Town? | no | 0.499 |
+| What are the best months to visit Barcelona? | no | 0.513 |
+| How do I write a for loop in Rust? | no | 0.853 |
+| Who won the 1994 World Cup? | no | 0.903 |
+
+In-corpus questions cluster at **0.287–0.372**. Out-of-corpus questions start
+at **0.467**, so the gap is 0.372 → 0.467, about 0.095 wide.
 
 ## How I Used AI
 
