@@ -1,6 +1,7 @@
 # The Unofficial Guide
 
 <!-- Replace this line with your name and which corpus you picked. -->
+MITHUN VENKATESH GOWDA — I picked the "City Guides" corpora.
 
 > **This file is your submission.** Fill it in as you go — most sections get
 > written during the milestone that produces them, not at the end.
@@ -29,7 +30,7 @@
 
 ## Chunking Strategy
 
-**Chunk size:** one `##` section, whatever length that happens to be — 176 to 711 characters in this corpus, median 297. `CHUNK_SIZE` stays at 800 but only as a ceiling for splitting a section that ever arrives longer than that.
+**Chunk size:** one `##` section, whatever length that happens to be. The sections run 176 to 711 characters, median 297; with the document title prefixed on, the finished chunks run 174 to 762. `CHUNK_SIZE` stays at 800 but only as a ceiling for splitting a section that ever arrives longer than that.
 **Overlap:** 0.
 
 <!-- What about YOUR documents made you pick these numbers? Short posts and
